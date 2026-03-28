@@ -18,8 +18,7 @@ Project 1 - UTA, AHP/
 │   └── find_dominated.py                # Finds all dominated alternatives in the dataset
 ├── Instructions/
 │   ├── DA_Project_UTA_AHP.pdf           # Project requirements (UTA, AHP, grading)
-│   ├── DA_dataset_description.pdf       # Dataset description requirements and questions
-│   └── dataset_preparation_instructions.md  # Step-by-step data preparation guide
+│   └── DA_dataset_description.pdf       # Dataset description requirements and questions
 ├── pyproject.toml
 └── uv.lock
 ```

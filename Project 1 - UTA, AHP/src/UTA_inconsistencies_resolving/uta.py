@@ -18,7 +18,7 @@ METADATA_FILE = DATA_DIR / "criteria_metadata.csv"
 PREFERENCES_FILE = DATA_DIR / "preferences.csv"
 
 # Number of linear segments per criterion (γ_i). γ+1 characteristic points.
-GAMMA = 3
+GAMMA = 4
 
 # Weight constraints (from project requirements)
 WEIGHT_UB = 0.5      # u_i(β_i) <= 0.5 — no single criterion dominates
@@ -28,11 +28,11 @@ WEIGHT_LB = 0.0625   # u_i(β_i) >= 1/(2*n) — no criterion ignored
 DELTA = 0.001
 
 # Minimum share of each segment in criterion weight (anti-flatness)
-MIN_SEGMENT_SHARE = 0.05
+MIN_SEGMENT_SHARE = 0.15
 
 # Minimum difference between first and last segment to prevent linearity.
 # Expressed as fraction of criterion weight u_i(β_i).
-NON_LINEARITY_THRESHOLD = 0.1
+NON_LINEARITY_THRESHOLD = 0.25
 
 
 def load_data() -> tuple[pd.DataFrame, dict[str, int]]:

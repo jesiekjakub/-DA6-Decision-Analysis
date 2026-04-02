@@ -1,4 +1,4 @@
-# src/ahp/hierarchy_setup.py
+# DM's hierarchy setup for the AHP model
 
 CATEGORIES = ["Economic", "Social/Health", "Geography/Environment"]
 

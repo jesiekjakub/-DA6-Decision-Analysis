@@ -1,7 +1,7 @@
-# src/ahp/alternative_matrices.py
 import numpy as np
 from ahp.hierarchy_setup import DIRECTIONS
 
+# DM judgments are on a 1-9 Saaty scale
 THRESHOLDS = {
     "Employment rate":                   [(2,1),(4,2),(6,3),(8,4),(10,5),(12,6),(16,7),(20,8)],
     "Long-term unemployment rate":       [(0.5,1),(1.0,2),(2.0,3),(3.0,4),(4.0,5),(5.0,6),(6.0,7),(8.0,8)],
@@ -14,12 +14,14 @@ THRESHOLDS = {
 }
 
 def diff_to_score(abs_diff, thresholds):
+    # Mapping the absolute difference to AHP scores based on predefined thresholds
     for upper, score in thresholds:
         if abs_diff < upper:
             return score
     return 9
 
 def build_alternative_matrix(criterion, df):
+    # Build the pairwise comparison matrix for the alternatives
     vals = df[criterion].values
     direction = DIRECTIONS[criterion]
     thresh = THRESHOLDS[criterion]

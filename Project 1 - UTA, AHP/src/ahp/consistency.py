@@ -1,10 +1,11 @@
-# src/ahp/consistency.py
 import numpy as np
 
 def reconstruct_matrix(weights):
+    # Reconstruct the pairwise comparison matrix from the weight vector
     return np.outer(weights, 1.0 / weights)
 
 def max_discrepancy(A_orig, A_rec, labels):
+    # Find the largest absolute difference between A_orig and A_rec for discovering the most inconsistent pair
     n = A_orig.shape[0]
     best = {"diff": -1.0, "i": 0, "j": 0}
     for i in range(n):

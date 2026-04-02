@@ -1,5 +1,6 @@
-# src/ahp/dm_matrices.py
 import numpy as np
+
+# DM's pairwise comparison matrices for the Goal and Criteria levels
 
 # Goal: Categories
 # Order: [Economic, Social/Health, Geography/Environment]

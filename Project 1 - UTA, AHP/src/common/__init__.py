@@ -1,4 +1,4 @@
-"""Common utilities shared across UTA modules."""
+"""Re-exports for the common package."""
 
 from .config import (
     PROJECT_ROOT,

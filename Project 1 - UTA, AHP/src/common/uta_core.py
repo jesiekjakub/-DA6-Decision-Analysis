@@ -1,8 +1,6 @@
-"""Shared UTA model building functions.
+"""Core UTA building blocks -- characteristic points, interpolation, constraints etc.
 
-Contains characteristic points computation, interpolation, utility calculation,
-and common constraint builders used by both the inconsistency resolver and
-the discrimination solver.
+Used by both the inconsistency resolver (task 2.1) and the discrimination solver (task 2.2).
 """
 
 import pandas as pd
@@ -14,14 +12,7 @@ from .config import GAMMA, WEIGHT_UB, WEIGHT_LB, MIN_SEGMENT_SHARE, NON_LINEARIT
 def compute_characteristic_points(
     df: pd.DataFrame, directions: dict[str, int]
 ) -> dict[str, list[float]]:
-    """Compute gamma+1 equally-spaced characteristic points per criterion.
-
-    Points are ordered from worst (alpha_i) to best (beta_i) performance:
-      - Gain criteria: [min, ..., max]
-      - Cost criteria: [max, ..., min]
-
-    Ranges are based on the FULL set of alternatives (all 26 countries).
-    """
+    """gamma+1 equally-spaced points per criterion, ordered worst -> best."""
     char_points = {}
     for c in directions:
         col_min = df[c].min()
@@ -44,11 +35,8 @@ def interpolate_value(
     char_points: list[float],
     u_vars: list[pulp.LpVariable],
 ) -> pulp.LpAffineExpression:
-    """Linear interpolation of marginal value (lecture slide 17).
-
-    Given raw performance value, finds which segment it falls in and returns
-    a PuLP expression: u_i(x_i^j) + t * [u_i(x_i^{j+1}) - u_i(x_i^j)]
-    where t is the interpolation coefficient.
+    """Linear interpolation within the piecewise function.
+    Returns PuLP expression: u(x_j) + t * [u(x_{j+1}) - u(x_j)].
     """
     ascending = char_points[-1] > char_points[0]
 
@@ -64,7 +52,7 @@ def interpolate_value(
             t = abs(raw_val - lo) / span
             return u_vars[k] + t * (u_vars[k + 1] - u_vars[k])
 
-    # Edge case: value at boundary
+    # boundary check
     if abs(raw_val - char_points[0]) < 1e-9:
         return u_vars[0]
     if abs(raw_val - char_points[-1]) < 1e-9:
@@ -83,7 +71,7 @@ def compute_utility(
     char_points: dict[str, list[float]],
     u_vars: dict[str, list[pulp.LpVariable]],
 ) -> pulp.LpAffineExpression:
-    """Compute U(a) = sum_i u_i(g_i(a)) for a given country."""
+    """U(a) = sum of marginal values for a country."""
     row = df[df["Country"] == country].iloc[0]
     expr = pulp.LpAffineExpression()
     for c in criteria:
@@ -95,7 +83,7 @@ def compute_utility(
 def create_marginal_value_variables(
     criteria: list[str],
 ) -> dict[str, list[pulp.LpVariable]]:
-    """Create u_i(x_i^j) decision variables for all criteria."""
+    """u_i(x_i^j) variables for each criterion."""
     u = {}
     for c in criteria:
         u[c] = [
@@ -110,7 +98,7 @@ def add_normalization_constraints(
     u: dict[str, list[pulp.LpVariable]],
     criteria: list[str],
 ) -> None:
-    """C1: Normalization — u_i(alpha_i)=0, sum u_i(beta_i)=1."""
+    """C1: u_i(alpha_i)=0 and sum u_i(beta_i)=1."""
     for c in criteria:
         model += u[c][0] == 0, f"norm_worst_{c}"
     model += (
@@ -124,7 +112,7 @@ def add_monotonicity_constraints(
     u: dict[str, list[pulp.LpVariable]],
     criteria: list[str],
 ) -> None:
-    """C2: Monotonicity — u[c][j+1] >= u[c][j]."""
+    """C2: u[c][j+1] >= u[c][j] for each segment."""
     for c in criteria:
         for j in range(GAMMA):
             model += (
@@ -138,7 +126,7 @@ def add_weight_bound_constraints(
     u: dict[str, list[pulp.LpVariable]],
     criteria: list[str],
 ) -> None:
-    """C3: Weight bounds — u_i(beta_i) in [WEIGHT_LB, WEIGHT_UB]."""
+    """C3: keep criterion weights within [WEIGHT_LB, WEIGHT_UB]."""
     for c in criteria:
         model += u[c][GAMMA] <= WEIGHT_UB, f"weight_ub_{c}"
         model += u[c][GAMMA] >= WEIGHT_LB, f"weight_lb_{c}"
@@ -149,8 +137,7 @@ def add_anti_flatness_constraints(
     u: dict[str, list[pulp.LpVariable]],
     criteria: list[str],
 ) -> None:
-    """C5: Anti-flatness — minimum segment share + non-linearity."""
-    # Minimum segment share
+    """C5: anti-flatness -- each segment gets a minimum share, plus non-linearity."""
     for c in criteria:
         for j in range(GAMMA):
             model += (
@@ -158,7 +145,7 @@ def add_anti_flatness_constraints(
                 f"min_seg_{c}_seg{j}",
             )
 
-    # Non-linearity: at least one pair of consecutive segments must differ
+    # non-linearity: first vs last segment must differ enough
     BIG = 1.0
     for c in criteria:
         seg_first = u[c][1] - u[c][0]
@@ -176,7 +163,7 @@ def add_anti_flatness_constraints(
 
 
 def solve_model(model: pulp.LpProblem) -> int:
-    """Solve model with GLPK, falling back to CBC. Returns status code."""
+    """Try GLPK first, fall back to CBC if unavailable."""
     try:
         solver = pulp.GLPK_CMD(msg=0)
         model.solve(solver)

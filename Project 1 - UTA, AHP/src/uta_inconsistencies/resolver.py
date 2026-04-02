@@ -1,10 +1,7 @@
-"""UTA method with inconsistency resolution.
+"""Task 2.1 -- inconsistency resolution.
 
-Implements the UTA preference disaggregation method with piecewise-linear
-marginal value functions. Resolves inconsistencies by finding all minimal
-subsets of pairwise comparisons that need to be removed.
-
-Formalization follows the lecture by Prof. Kadzinski (slides 17-31).
+Finds all minimal subsets of preferences to remove so that the remaining
+ones are consistent with an additive value function.
 """
 
 import pandas as pd
@@ -30,36 +27,26 @@ def build_inconsistency_milp(
     preferences: list[tuple[str, str]],
     cuts: list[frozenset],
 ) -> tuple[pulp.LpProblem, dict[str, list[pulp.LpVariable]], list[pulp.LpVariable]]:
-    """Build MILP for inconsistency resolution (slides 29-31).
-
-    Variables:
-      u[criterion][j] -- marginal value at j-th characteristic point
-      v[k] in {0,1}   -- binary: 1 if k-th comparison is removed
-
-    Objective: Min sum v[k]
-    """
+    """MILP: minimize number of removed preferences (sum v[k])."""
     criteria = list(directions.keys())
     char_points = compute_characteristic_points(df, directions)
 
     model = pulp.LpProblem("UTA_inconsistency", pulp.LpMinimize)
 
-    # --- Decision variables ---
     u = create_marginal_value_variables(criteria)
 
-    # --- Binary variables: v_k for each pairwise comparison ---
+    # v[k] = 1 means k-th preference is removed
     v = [pulp.LpVariable(f"v_{k}", cat=pulp.LpBinary) for k in range(len(preferences))]
 
-    # --- Objective: Min sum v[k] ---
     model += pulp.lpSum(v), "minimize_removals"
 
-    # --- Constraints C1-C3, C5 (shared) ---
+    # C1-C3, C5
     add_normalization_constraints(model, u, criteria)
     add_monotonicity_constraints(model, u, criteria)
     add_weight_bound_constraints(model, u, criteria)
     add_anti_flatness_constraints(model, u, criteria)
 
-    # --- C4: Pairwise comparisons with inconsistency resolution ---
-    # U(a) >= U(b) + delta - v_{a,b}
+    # C4: U(a) >= U(b) + delta - v[k]  (relaxed when v[k]=1)
     for k, (preferred, over) in enumerate(preferences):
         u_preferred = compute_utility(preferred, df, criteria, char_points, u)
         u_over = compute_utility(over, df, criteria, char_points, u)
@@ -68,9 +55,9 @@ def build_inconsistency_milp(
             f"pref_{k}_{preferred}_over_{over}",
         )
 
-    # --- Cuts from previous iterations ---
+    # cuts: prevent re-finding the same removal sets
     for cut_idx, removal_set in enumerate(cuts):
-        # sum_{k in V_k} v[k] <= |V_k| - 1
+        # exclude this exact set: sum v[k] <= |set| - 1
         model += (
             pulp.lpSum(v[k] for k in removal_set) <= len(removal_set) - 1,
             f"cut_{cut_idx}",
@@ -84,11 +71,7 @@ def find_all_minimal_removals(
     directions: dict[str, int],
     preferences: list[tuple[str, str]],
 ) -> list[frozenset]:
-    """Find all minimal subsets of comparisons to remove (slide 31).
-
-    Iteratively solves MILP, adding cuts to prevent finding the same
-    removal set again. Stops when MILP becomes infeasible.
-    """
+    """Iteratively solve MILP + add cuts until infeasible."""
     cuts: list[frozenset] = []
     removals: list[frozenset] = []
     iteration = 0
@@ -103,7 +86,7 @@ def find_all_minimal_removals(
             print(f"\nIteration {iteration}: Infeasible — all minimal removal sets found.")
             break
 
-        # Extract removal set V_k = {k : v[k] = 1}
+        # which preferences got removed?
         removal_set = frozenset(
             k for k in range(len(preferences)) if v[k].varValue > 0.5
         )
@@ -122,7 +105,7 @@ def print_results(
     removals: list[frozenset],
     preferences: list[tuple[str, str]],
 ) -> None:
-    """Print all minimal removal sets and corresponding consistent subsets."""
+    """Show each removal set and which preferences remain."""
     print(f"\n{'='*70}")
     print(f"RESULTS: Found {len(removals)} minimal removal set(s)")
     print(f"{'='*70}")
@@ -151,12 +134,12 @@ def main() -> None:
     print(f"Preferences: {len(preferences)} pairwise comparisons")
     print()
 
-    # Print preferences
+    # show preferences
     print("Pairwise comparisons:")
     for k, (pref, over) in enumerate(preferences):
         print(f"  [{k}] {pref} ≻ {over}")
 
-    # Print characteristic points
+    # characteristic points
     char_points = compute_characteristic_points(df, directions)
     print(f"\nCharacteristic points (gamma={GAMMA}, {GAMMA+1} points per criterion):")
     for c in criteria:
@@ -164,7 +147,7 @@ def main() -> None:
         pts = [f"{p:.1f}" for p in char_points[c]]
         print(f"  {c} ({nature}): {' -> '.join(pts)}")
 
-    # Find all minimal removal sets
+    # find all minimal removal sets
     print(f"\n{'='*70}")
     print("FINDING ALL MINIMAL REMOVAL SETS")
     print(f"{'='*70}")

@@ -1,8 +1,6 @@
-"""Prepare MCDA dataset from OECD Better Life Index raw data.
-
-Transforms the long-format OECD BLI CSV into a wide-format dataset
-suitable for UTA and AHP analysis. Filters to European countries,
-selects specific indicators as criteria, and adds distance from Poznan.
+"""Turns the raw OECD BLI CSV (long format) into a clean wide-format dataset
+for our UTA/AHP analysis. Filters European countries, picks criteria,
+adds distance from Poznan.
 """
 
 import json
@@ -38,7 +36,7 @@ EUROPEAN_COUNTRIES = [
 
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Return great-circle distance in km between two points on Earth."""
+    """Great-circle distance in km."""
     R = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -49,7 +47,7 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def find_raw_csv():
-    """Find the raw OECD BLI CSV file in data/raw/."""
+    """Locate the BLI CSV in data/raw/."""
     csvs = list(RAW_DIR.glob("*.csv"))
     if not csvs:
         print("ERROR: No CSV file found in data/raw/")
@@ -64,7 +62,6 @@ def find_raw_csv():
 
 
 def explore_dataset(df: pd.DataFrame) -> None:
-    """Print diagnostic information about the raw dataset."""
     print(f"\n{'='*60}")
     print("RAW DATASET EXPLORATION")
     print(f"{'='*60}")
@@ -85,7 +82,7 @@ def explore_dataset(df: pd.DataFrame) -> None:
             marker = " <-- EUROPEAN" if c in EUROPEAN_COUNTRIES else ""
             print(f"  - {c}{marker}")
 
-    # Show columns that might be used for filtering aggregation level
+    # check aggregation-level columns
     for col in ["Inequality", "INEQUALITY", "Measure", "MEASURE"]:
         if col in df.columns:
             print(f"\nUnique values in '{col}': {sorted(df[col].unique())}")
@@ -98,7 +95,7 @@ def main() -> None:
 
     explore_dataset(df)
 
-    # --- Filter European countries ---
+    # filter to European countries
     if "Country" not in df.columns:
         print("ERROR: 'Country' column not found. Available columns:", list(df.columns))
         sys.exit(1)
@@ -110,7 +107,7 @@ def main() -> None:
         print(f"\nWARNING: These European countries are NOT in the dataset: {sorted(missing)}")
     print(f"\nEuropean countries found: {len(found_countries)}")
 
-    # --- Filter selected indicators ---
+    # filter indicators
     if "Indicator" not in df.columns:
         print("ERROR: 'Indicator' column not found.")
         sys.exit(1)
@@ -127,7 +124,7 @@ def main() -> None:
 
     df_filtered = df_europe[df_europe["Indicator"].isin(SELECTED_INDICATORS)]
 
-    # --- Filter to "Total" aggregation (avoid gender/inequality splits) ---
+    # keep only "Total" rows (skip gender/inequality breakdowns)
     inequality_col = None
     for col in ["Inequality", "INEQUALITY"]:
         if col in df_filtered.columns:
@@ -144,7 +141,7 @@ def main() -> None:
         else:
             print(f"WARNING: No 'Total' or 'TOT' value found in '{inequality_col}'. Using all rows.")
 
-    # --- Pivot long to wide ---
+    # pivot long -> wide
     df_wide = df_filtered.pivot_table(
         index="Country",
         columns="Indicator",
@@ -158,7 +155,7 @@ def main() -> None:
     print(f"Shape: {df_wide.shape}")
     print(f"Columns: {list(df_wide.columns)}")
 
-    # --- Handle missing values ---
+    # handle NaNs
     nan_counts = df_wide[SELECTED_INDICATORS].isna().sum()
     if nan_counts.any():
         print(f"\nMissing values per indicator:\n{nan_counts[nan_counts > 0]}")
@@ -166,7 +163,7 @@ def main() -> None:
         countries_with_nan = df_wide.loc[rows_with_nan, "Country"].tolist()
         print(f"Countries with missing data: {countries_with_nan}")
 
-        # Drop rows with any NaN first
+        # try dropping NaN rows first
         df_clean = df_wide.dropna(subset=SELECTED_INDICATORS)
         if len(df_clean) >= 12:
             print(f"After dropping NaN rows: {len(df_clean)} countries remain (>= 12, OK)")
@@ -180,7 +177,7 @@ def main() -> None:
                     df_wide[col] = df_wide[col].fillna(median_val)
                     print(f"  Filled {filled} NaN in '{col}' with median={median_val:.2f}")
 
-    # --- Compute distances from Poznan ---
+    # distance from Poznan
     with open(CAPITALS_FILE) as f:
         capitals = json.load(f)
 
@@ -195,12 +192,12 @@ def main() -> None:
 
     df_wide["Distance from Poznan (km)"] = distances
 
-    # --- Reorder columns ---
+    # reorder and sort
     final_columns = ["Country"] + SELECTED_INDICATORS + ["Distance from Poznan (km)"]
     df_wide = df_wide[final_columns]
     df_wide = df_wide.sort_values("Country").reset_index(drop=True)
 
-    # --- Validation ---
+    # sanity checks (project requires 12-50 alternatives, 4-9 criteria)
     n_alternatives = len(df_wide)
     n_criteria = len(final_columns) - 1  # exclude Country
     assert 12 <= n_alternatives <= 50, f"Alternatives count {n_alternatives} outside 12-50 range"
@@ -214,7 +211,7 @@ def main() -> None:
     print(f"Criteria: {n_criteria}")
     print(f"\n{df_wide.to_string(index=False)}")
 
-    # --- Save ---
+    # save
     df_wide.to_csv(DATASET_FILE, index=False)
     print(f"\nDataset saved to: {DATASET_FILE}")
 

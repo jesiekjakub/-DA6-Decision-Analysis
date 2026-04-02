@@ -1,4 +1,4 @@
-"""Find all dominated alternatives in the MCDA dataset."""
+"""Pareto dominance check."""
 
 import pandas as pd
 
@@ -39,7 +39,7 @@ def main() -> None:
     for dominator, dominated in sorted(pairs):
         print(f"  {dominator} dominates {dominated}")
 
-    # Summary: which countries are dominated and by how many
+    # per-country summary
     dominated_counts: dict[str, list[str]] = {}
     for dominator, dominated in pairs:
         dominated_counts.setdefault(dominated, []).append(dominator)

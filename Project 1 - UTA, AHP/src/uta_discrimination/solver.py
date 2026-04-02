@@ -1,8 +1,7 @@
-"""UTA 2.2 -- Most discriminant value function.
+"""Task 2.2 -- most discriminant value function.
 
-For the largest consistent subset of preferences (identified in task 2.1),
-finds the additive value function that maximizes the minimum utility gap
-between alternatives in a preference relationship.
+Maximizes the discrimination threshold (epsilon) for the consistent
+preference subset from task 2.1.
 """
 
 import pandas as pd
@@ -27,10 +26,7 @@ def get_consistent_preferences(
     preferences: list[tuple[str, str]],
     removal_indices: set[int],
 ) -> list[tuple[int, tuple[str, str]]]:
-    """Return preferences with removed indices excluded.
-
-    Returns list of (original_index, (preferred, over)) tuples.
-    """
+    """Filter out preferences marked for removal, keep original indices."""
     return [
         (i, pref) for i, pref in enumerate(preferences) if i not in removal_indices
     ]
@@ -41,33 +37,25 @@ def build_discrimination_model(
     directions: dict[str, int],
     consistent_prefs: list[tuple[int, tuple[str, str]]],
 ) -> tuple[pulp.LpProblem, dict[str, list[pulp.LpVariable]], pulp.LpVariable]:
-    """Build LP/MILP maximizing discrimination threshold epsilon.
-
-    Objective: maximize epsilon
-    C4: U(a) - U(b) >= epsilon for each kept preference (no binary v variables)
-    C1-C3, C5: same as task 2.1
+    """Maximize epsilon s.t. U(a)-U(b) >= epsilon for each preference.
+    Same C1-C3, C5 as in task 2.1.
     """
     criteria = list(directions.keys())
     char_points = compute_characteristic_points(df, directions)
 
     model = pulp.LpProblem("UTA_discrimination", pulp.LpMaximize)
 
-    # --- Decision variables ---
     u = create_marginal_value_variables(criteria)
-
-    # --- Epsilon: discrimination threshold to maximize ---
     epsilon = pulp.LpVariable("epsilon", lowBound=0)
-
-    # --- Objective: maximize epsilon ---
     model += epsilon, "maximize_discrimination"
 
-    # --- Constraints C1-C3, C5 (shared) ---
+    # C1-C3, C5
     add_normalization_constraints(model, u, criteria)
     add_monotonicity_constraints(model, u, criteria)
     add_weight_bound_constraints(model, u, criteria)
     add_anti_flatness_constraints(model, u, criteria)
 
-    # --- C4: Preference constraints (hard, with epsilon) ---
+    # C4: U(a) - U(b) >= epsilon
     for orig_k, (preferred, over) in consistent_prefs:
         u_pref = compute_utility(preferred, df, criteria, char_points, u)
         u_over = compute_utility(over, df, criteria, char_points, u)
@@ -86,7 +74,7 @@ def print_model_details(
     criteria: list[str],
     char_points: dict[str, list[float]],
 ) -> None:
-    """Print all model equations, variable values, and objective value."""
+    """Dump model details for debugging / report."""
     print(f"\n{'='*70}")
     print("MODEL EQUATIONS")
     print(f"{'='*70}")
@@ -127,7 +115,7 @@ def rank_alternatives(
     criteria: list[str],
     char_points: dict[str, list[float]],
 ) -> pd.DataFrame:
-    """Compute U(a) for all countries and return ranked DataFrame."""
+    """Rank all countries by their total utility."""
     results = []
     for _, row in df.iterrows():
         country = row["Country"]
@@ -147,10 +135,7 @@ def plot_marginal_value_functions(
     char_points: dict[str, list[float]],
     directions: dict[str, int],
 ) -> plt.Figure:
-    """Plot piecewise-linear marginal value functions for all criteria.
-
-    All plots scaled to the same maximum Y value. Returns the figure.
-    """
+    """Plot marginal value functions (all scaled to the same Y range)."""
     max_weight = max(u[c][GAMMA].varValue for c in criteria)
 
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
@@ -161,8 +146,7 @@ def plot_marginal_value_functions(
         pts = char_points[c]
         vals = [u[c][j].varValue for j in range(GAMMA + 1)]
 
-        # For cost criteria, characteristic points go from worst (high) to best (low).
-        # Plot in natural raw value order (ascending) for readability.
+        # for cost criteria flip so X axis goes low->high
         if directions[c] == -1:
             x_plot = list(reversed(pts))
             y_plot = list(reversed(vals))
@@ -194,7 +178,7 @@ def main() -> None:
     print(f"Dataset: {len(df)} alternatives, {len(criteria)} criteria")
     print(f"Total preferences: {len(preferences)}")
 
-    # Load removal choice and build consistent subset
+    # load the removal set chosen in task 2.1
     removal_indices = load_removal_indices()
     print(f"Removed preference indices: {sorted(removal_indices)}")
     for idx in sorted(removal_indices):
@@ -203,7 +187,7 @@ def main() -> None:
     consistent_prefs = get_consistent_preferences(preferences, removal_indices)
     print(f"Consistent subset: {len(consistent_prefs)} preferences")
 
-    # Build and solve
+    # build and solve the LP
     char_points = compute_characteristic_points(df, directions)
     model, u, epsilon = build_discrimination_model(df, directions, consistent_prefs)
 
@@ -215,17 +199,17 @@ def main() -> None:
         print("ERROR: Model is not optimal. Check constraints.")
         return
 
-    # Print full model details
+    # details
     print_model_details(model, u, epsilon, criteria, char_points)
 
-    # Rank all alternatives
+    # ranking
     ranking = rank_alternatives(df, directions, u, criteria, char_points)
     print(f"\n{'='*70}")
     print("RANKING OF ALL ALTERNATIVES")
     print(f"{'='*70}")
     print(ranking.to_string())
 
-    # Plot (saved to file when run as script)
+    # plot
     fig = plot_marginal_value_functions(u, criteria, char_points, directions)
     output_path = OUTPUT_DIR / "marginal_value_functions.png"
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
